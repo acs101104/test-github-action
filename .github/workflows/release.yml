@@ -1,0 +1,73 @@
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+name: Create Release
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          body: |
+            Please refer to [release notes](https://docs.google.com/document/d/1DARvDk-_2qAi8sJVTLJ3PgJ10sbDbBmaRdxKR1L-6zo/edit) for details.
+          draft: false
+          prerelease: false
+      - name: Install utility tools
+        run: |
+          sudo apt update
+          sudo apt install sshpass -y
+          sudo apt install zip -y
+      - name: Download firmware
+        run: |
+          sshpass -p ${SSH_PASSWD} scp -P ${SSH_PORT} -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_IP}:${RLEASE_PATH}/*zip .
+        env:
+          SSH_PASSWD: ${{ secrets.SSH_PASSWD }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_IP: ${{ secrets.SSH_IP }}
+          RLEASE_PATH: ${{ secrets.RLEASE_PATH }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+      - name: Check if firmwares were downloaded
+        run: ls
+      - name: Upload firmware to release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.zip
+      - name: Upload to gdrive
+        uses: adityak74/google-drive-upload-git-action@main
+        with:
+          folderId: ${{ secrets.folderId }}
+          credentials: ${{ secrets.credentials }}
+          overwrite: true
+          filename: |
+            *.zip
+      - name: Send release email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: PEX89144 fabric mode ${{ github.ref_name }} released
+          to: ${{ secrets.recipients }}
+          from: firmware-release[bot]
+          body: |
+            
+            The new firmware is now available.
+            For details on the firmware, please check the release notes and CLI document.
+
+          cc: ${{ secrets.carbon_copy_recipients }}
